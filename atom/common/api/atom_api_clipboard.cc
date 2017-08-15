@@ -37,14 +37,33 @@ bool Clipboard::Has(const std::string& format_string, mate::Arguments* args) {
   return clipboard->IsFormatAvailable(format, GetClipboardType(args));
 }
 
-std::string Clipboard::Read(const std::string& format_string,
-                            mate::Arguments* args) {
+std::string Clipboard::Read(const std::string& format_string) {
   ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
   ui::Clipboard::FormatType format(ui::Clipboard::GetFormatType(format_string));
 
   std::string data;
   clipboard->ReadData(format, &data);
   return data;
+}
+
+v8::Local<v8::Value> Clipboard::ReadBuffer(const std::string& format_string,
+                                           mate::Arguments* args) {
+  std::string data = Read(format_string);
+  return node::Buffer::Copy(
+      args->isolate(), data.data(), data.length()).ToLocalChecked();
+}
+
+void Clipboard::WriteBuffer(const std::string& format,
+                            const v8::Local<v8::Value> buffer,
+                            mate::Arguments* args) {
+  if (!node::Buffer::HasInstance(buffer)) {
+    args->ThrowError("buffer must be a node Buffer");
+    return;
+  }
+
+  ui::ScopedClipboardWriter writer(GetClipboardType(args));
+  writer.WriteData(node::Buffer::Data(buffer), node::Buffer::Length(buffer),
+                   ui::Clipboard::GetFormatType(format));
 }
 
 void Clipboard::Write(const mate::Dictionary& data, mate::Arguments* args) {
@@ -184,6 +203,8 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value> unused,
   dict.SetMethod("writeImage", &atom::api::Clipboard::WriteImage);
   dict.SetMethod("readFindText", &atom::api::Clipboard::ReadFindText);
   dict.SetMethod("writeFindText", &atom::api::Clipboard::WriteFindText);
+  dict.SetMethod("readBuffer", &atom::api::Clipboard::ReadBuffer);
+  dict.SetMethod("writeBuffer", &atom::api::Clipboard::WriteBuffer);
   dict.SetMethod("clear", &atom::api::Clipboard::Clear);
 
   // TODO(kevinsawicki): Remove in 2.0, deprecate before then with warnings

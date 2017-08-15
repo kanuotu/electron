@@ -68,26 +68,24 @@ The following methods are available on instances of `Cookies`:
   * `session` Boolean (optional) - Filters out session or persistent cookies.
 * `callback` Function
   * `error` Error
-  * `cookies` Cookies[]
+  * `cookies` [Cookie[]](structures/cookie.md) - an array of cookie objects.
 
 Sends a request to get all cookies matching `details`, `callback` will be called
 with `callback(error, cookies)` on complete.
-
-`cookies` is an Array of [`cookie`](structures/cookie.md) objects.
 
 #### `cookies.set(details, callback)`
 
 * `details` Object
   * `url` String - The url to associate the cookie with.
-  * `name` String - (optional) The name of the cookie. Empty by default if omitted.
-  * `value` String - (optional) The value of the cookie. Empty by default if omitted.
-  * `domain` String - (optional) The domain of the cookie. Empty by default if omitted.
-  * `path` String - (optional) The path of the cookie. Empty by default if omitted.
-  * `secure` Boolean - (optional) Whether the cookie should be marked as Secure. Defaults to
+  * `name` String (optional) - The name of the cookie. Empty by default if omitted.
+  * `value` String (optional) - The value of the cookie. Empty by default if omitted.
+  * `domain` String (optional) - The domain of the cookie. Empty by default if omitted.
+  * `path` String (optional) - The path of the cookie. Empty by default if omitted.
+  * `secure` Boolean (optional) - Whether the cookie should be marked as Secure. Defaults to
     false.
-  * `httpOnly` Boolean - (optional) Whether the cookie should be marked as HTTP only.
+  * `httpOnly` Boolean (optional) - Whether the cookie should be marked as HTTP only.
     Defaults to false.
-  * `expirationDate` Double -	(optional) The expiration date of the cookie as the number of
+  * `expirationDate` Double (optional) - The expiration date of the cookie as the number of
     seconds since the UNIX epoch. If omitted then the cookie becomes a session
     cookie and will not be retained between sessions.
 * `callback` Function
@@ -104,3 +102,9 @@ on complete.
 
 Removes the cookies matching `url` and `name`, `callback` will called with
 `callback()` on complete.
+
+#### `cookies.flushStore(callback)`
+
+* `callback` Function
+
+Writes any unwritten cookies data to disk.

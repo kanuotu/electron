@@ -98,9 +98,11 @@ class Browser : public WindowListObserver {
     bool restore_state = false;
     bool opened_at_login = false;
     bool opened_as_hidden = false;
+    base::string16 path;
+    std::vector<base::string16> args;
   };
   void SetLoginItemSettings(LoginItemSettings settings);
-  LoginItemSettings GetLoginItemSettings();
+  LoginItemSettings GetLoginItemSettings(const LoginItemSettings& options);
 
 #if defined(OS_MACOSX)
   // Hide the application.
@@ -180,6 +182,11 @@ class Browser : public WindowListObserver {
 
   // Tell the application to open a url.
   void OpenURL(const std::string& url);
+
+#if defined(OS_MACOSX)
+  // Tell the application to create a new window for a tab.
+  void NewWindowForTab();
+#endif  // defined(OS_MACOSX)
 
   // Tell the application that application is activated with visible/invisible
   // windows.

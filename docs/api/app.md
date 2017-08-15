@@ -125,8 +125,10 @@ Returns:
 * `event` Event
 * `hasVisibleWindows` Boolean
 
-Emitted when the application is activated, which usually happens when the user
-clicks on the application's dock icon.
+Emitted when the application is activated. Various actions can trigger
+this event, such as launching the application for the first time, attempting
+to re-launch the application when it's already running, or clicking on the
+application's dock or taskbar icon.
 
 ### Event: 'continue-activity' _macOS_
 
@@ -146,6 +148,16 @@ A user activity can be continued only in an app that has the same developer Team
 ID as the activity's source app and that supports the activity's type.
 Supported activity types are specified in the app's `Info.plist` under the
 `NSUserActivityTypes` key.
+
+### Event: 'new-window-for-tab' _macOS_
+
+Returns:
+
+* `event` Event
+
+Emitted when the user clicks the native macOS new tab button. The new
+tab button is only visible if the current `BrowserWindow` has a
+`tabbingIdentifier`
 
 ### Event: 'browser-window-blur'
 
@@ -401,6 +413,28 @@ You can request the following paths by the name:
 * `videos` Directory for a user's videos.
 * `pepperFlashSystemPlugin`  Full path to the system version of the Pepper Flash plugin.
 
+### `app.getFileIcon(path[, options], callback)`
+
+* `path` String
+* `options` Object (optional)
+  * `size` String
+    * `small` - 16x16
+    * `normal` - 32x32
+    * `large` - 48x48 on _Linux_, 32x32 on _Windows_, unsupported on _macOS_.
+* `callback` Function
+  * `error` Error
+  * `icon` [NativeImage](native-image.md)
+
+Fetches a path's associated icon.
+
+On _Windows_, there a 2 kinds of icons:
+
+- Icons associated with certain file extensions, like `.mp3`, `.png`, etc.
+- Icons inside the file itself, like `.exe`, `.dll`, `.ico`.
+
+On _Linux_ and _macOS_, icons depend on the application associated with file
+mime type.
+
 ### `app.setPath(name, path)`
 
 * `name` String
@@ -467,7 +501,7 @@ Clears the recent documents list.
   app to handle `electron://` links, call this method with `electron` as the
   parameter.
 * `path` String (optional) _Windows_ - Defaults to `process.execPath`
-* `args` String[] - (optional) _Windows_ - Defaults to an empty array
+* `args` String[] (optional) _Windows_ - Defaults to an empty array
 
 Returns `Boolean` - Whether the call succeeded.
 
@@ -491,7 +525,7 @@ The API uses the Windows Registry and LSSetDefaultHandlerForURLScheme internally
 
 * `protocol` String - The name of your protocol, without `://`.
 * `path` String (optional) _Windows_ - Defaults to `process.execPath`
-* `args` String[] - (optional) _Windows_ - Defaults to an empty array
+* `args` String[] (optional) _Windows_ - Defaults to an empty array
 
 Returns `Boolean` - Whether the call succeeded.
 
@@ -503,7 +537,7 @@ protocol (aka URI scheme). If so, it will remove the app as the default handler.
 
 * `protocol` String - The name of your protocol, without `://`.
 * `path` String (optional) _Windows_ - Defaults to `process.execPath`
-* `args` String[] - (optional) _Windows_ - Defaults to an empty array
+* `args` String[] (optional) _Windows_ - Defaults to an empty array
 
 Returns `Boolean`
 
@@ -643,14 +677,16 @@ app.setJumpList([
   * `argv` String[] - An array of the second instance's command line arguments
   * `workingDirectory` String - The second instance's working directory
 
+Returns `Boolean`.
+
 This method makes your application a Single Instance Application - instead of
 allowing multiple instances of your app to run, this will ensure that only a
 single instance of your app is running, and other instances signal this
 instance and exit.
 
-`callback` will be called with `callback(argv, workingDirectory)` when a second
-instance has been executed. `argv` is an Array of the second instance's command
-line arguments, and `workingDirectory` is its current working directory. Usually
+`callback` will be called by the first instance with `callback(argv, workingDirectory)`
+when a second instance has been executed. `argv` is an Array of the second instance's
+command line arguments, and `workingDirectory` is its current working directory. Usually
 applications respond to this by making their primary window focused and
 non-minimized.
 
@@ -675,7 +711,7 @@ starts:
 const {app} = require('electron')
 let myWindow = null
 
-const shouldQuit = app.makeSingleInstance((commandLine, workingDirectory) => {
+const isSecondInstance = app.makeSingleInstance((commandLine, workingDirectory) => {
   // Someone tried to run a second instance, we should focus our window.
   if (myWindow) {
     if (myWindow.isMinimized()) myWindow.restore()
@@ -683,7 +719,7 @@ const shouldQuit = app.makeSingleInstance((commandLine, workingDirectory) => {
   }
 })
 
-if (shouldQuit) {
+if (isSecondInstance) {
   app.quit()
 }
 
@@ -736,6 +772,27 @@ Disables hardware acceleration for current app.
 
 This method can only be called before app is ready.
 
+### `app.disableDomainBlockingFor3DAPIs()`
+
+By default, Chromium disables 3D APIs (e.g. WebGL) until restart on a per
+domain basis if the GPU processes crashes too frequently. This function
+disables that behaviour.
+
+This method can only be called before app is ready.
+
+### `app.getAppMemoryInfo()` _Deprecated_
+
+Returns [`ProcessMetric[]`](structures/process-metric.md):  Array of `ProcessMetric` objects that correspond to memory and cpu usage statistics of all the processes associated with the app.
+**Note:** This method is deprecated, use `app.getAppMetrics()` instead.
+
+### `app.getAppMetrics()`
+
+Returns [`ProcessMetric[]`](structures/process-metric.md):  Array of `ProcessMetric` objects that correspond to memory and cpu usage statistics of all the processes associated with the app.
+
+### `app.getGpuFeatureStatus()`
+
+Returns [`GPUFeatureStatus`](structures/gpu-feature-status.md) - The Graphics Feature Status from `chrome://gpu/`.
+
 ### `app.setBadgeCount(count)` _Linux_ _macOS_
 
 * `count` Integer
@@ -747,8 +804,8 @@ badge.
 
 On macOS it shows on the dock icon. On Linux it only works for Unity launcher,
 
-**Note:** Unity launcher requires the exsistence of a `.desktop` file to work,
-for more information please read [Desktop Environment Integration][unity-requiremnt].
+**Note:** Unity launcher requires the existence of a `.desktop` file to work,
+for more information please read [Desktop Environment Integration][unity-requirement].
 
 ### `app.getBadgeCount()` _Linux_ _macOS_
 
@@ -758,7 +815,16 @@ Returns `Integer` - The current value displayed in the counter badge.
 
 Returns `Boolean` - Whether the current desktop environment is Unity launcher.
 
-### `app.getLoginItemSettings()` _macOS_ _Windows_
+### `app.getLoginItemSettings([options])` _macOS_ _Windows_
+
+* `options` Object (optional)
+  * `path` String (optional) _Windows_ - The executable path to compare against.
+    Defaults to `process.execPath`.
+  * `args` String[] (optional) _Windows_ - The command-line arguments to compare
+    against. Defaults to an empty array.
+
+If you provided `path` and `args` options to `app.setLoginItemSettings` then you
+need to pass the same arguments here for `openAtLogin` to be set correctly.
 
 Returns `Object`:
 
@@ -775,8 +841,7 @@ Returns `Object`:
   app should restore the windows that were open the last time the app was
   closed. This setting is only supported on macOS.
 
-**Note:** This API has no effect on
-[MAS builds][mas-builds].
+**Note:** This API has no effect on [MAS builds][mas-builds].
 
 ### `app.setLoginItemSettings(settings)` _macOS_ _Windows_
 
@@ -788,11 +853,34 @@ Returns `Object`:
     `app.getLoginItemStatus().wasOpenedAsHidden` should be checked when the app
     is opened to know the current value. This setting is only supported on
     macOS.
+  * `path` String (optional) _Windows_ - The executable to launch at login.
+    Defaults to `process.execPath`.
+  * `args` String[] (optional) _Windows_ - The command-line arguments to pass to
+    the executable. Defaults to an empty array. Take care to wrap paths in
+    quotes.
 
 Set the app's login item settings.
 
-**Note:** This API has no effect on
-[MAS builds][mas-builds].
+To work with Electron's `autoUpdater` on Windows, which uses [Squirrel][Squirrel-Windows],
+you'll want to set the launch path to Update.exe, and pass arguments that specify your
+application name. For example:
+
+``` javascript
+const appFolder = path.dirname(process.execPath)
+const updateExe = path.resolve(appFolder, '..', 'Update.exe')
+const exeName = path.basename(process.execPath)
+
+app.setLoginItemSettings({
+  openAtLogin: true,
+  path: updateExe,
+  args: [
+    '--processStart', `"${exeName}"`,
+    '--process-start-args', `"--hidden"`
+  ]
+})
+```
+
+**Note:** This API has no effect on [MAS builds][mas-builds].
 
 ### `app.isAccessibilitySupportEnabled()` _macOS_ _Windows_
 
@@ -832,6 +920,12 @@ Append an argument to Chromium's command line. The argument will be quoted
 correctly.
 
 **Note:** This will not affect `process.argv`.
+
+### `app.enableMixedSandbox()` _Experimental_ _macOS_ _Windows_
+
+Enables mixed sandbox mode on the app.
+
+This method can only be called before app is ready.
 
 ### `app.dock.bounce([type])` _macOS_
 
@@ -902,7 +996,8 @@ Sets the `image` associated with this dock icon.
 [LSCopyDefaultHandlerForURLScheme]: https://developer.apple.com/library/mac/documentation/Carbon/Reference/LaunchServicesReference/#//apple_ref/c/func/LSCopyDefaultHandlerForURLScheme
 [handoff]: https://developer.apple.com/library/ios/documentation/UserExperience/Conceptual/Handoff/HandoffFundamentals/HandoffFundamentals.html
 [activity-type]: https://developer.apple.com/library/ios/documentation/Foundation/Reference/NSUserActivity_Class/index.html#//apple_ref/occ/instp/NSUserActivity/activityType
-[unity-requiremnt]: ../tutorial/desktop-environment-integration.md#unity-launcher-shortcuts-linux
+[unity-requirement]: ../tutorial/desktop-environment-integration.md#unity-launcher-shortcuts-linux
 [mas-builds]: ../tutorial/mac-app-store-submission-guide.md
+[Squirrel-Windows]: https://github.com/Squirrel/Squirrel.Windows
 [JumpListBeginListMSDN]: https://msdn.microsoft.com/en-us/library/windows/desktop/dd378398(v=vs.85).aspx
 [about-panel-options]: https://developer.apple.com/reference/appkit/nsapplication/1428479-orderfrontstandardaboutpanelwith?language=objc

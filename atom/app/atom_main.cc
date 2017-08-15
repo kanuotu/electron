@@ -56,6 +56,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, wchar_t* cmd, int) {
 
   bool run_as_node = IsEnvSet(kRunAsNode);
 
+
   // Make sure the output is printed to console.
   if (run_as_node || !IsEnvSet("ELECTRON_NO_ATTACH_CONSOLE"))
     base::RouteStdioToConsole(false);

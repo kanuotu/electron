@@ -2,6 +2,8 @@
 
 > Display external web content in an isolated frame and process.
 
+Process: [Renderer](../tutorial/quick-start.md#renderer-process)
+
 Use the `webview` tag to embed 'guest' content (such as web pages) in your
 Electron app. The guest content is contained within the `webview` container.
 An embedded page within your app controls how the guest content is laid out and
@@ -10,10 +12,8 @@ rendered.
 Unlike an `iframe`, the `webview` runs in a separate process than your
 app. It doesn't have the same permissions as your web page and all interactions
 between your app and embedded content will be asynchronous. This keeps your app
-safe from the embedded content.
-
-For security purposes, `webview` can only be used in `BrowserWindow`s that have
-`nodeIntegration` enabled.
+safe from the embedded content. **Note:** Most methods called on the
+webview from the host page require a synchronous call to the main process.
 
 ## Example
 
@@ -35,7 +35,7 @@ and displays a "loading..." message during the load time:
 ```html
 <script>
   onload = () => {
-    const webview = document.getElementById('foo')
+    const webview = document.querySelector('webview')
     const indicator = document.querySelector('.indicator')
 
     const loadstart = () => {
@@ -60,12 +60,11 @@ container when used with traditional and flexbox layouts (since v0.36.11). Pleas
 do not overwrite the default `display:flex;` CSS property, unless specifying
 `display:inline-flex;` for inline layout.
 
-`webview` has issues being hidden using the `hidden` attribute or using `display: none;`.
-It can cause unusual rendering behaviour within its child `browserplugin` object
-and the web page is reloaded, when the `webview` is un-hidden, as opposed to just
-becoming visible again. The recommended approach is to hide the `webview` using
-CSS by zeroing the `width` & `height` and allowing the element to shrink to the 0px
-dimensions via `flex`.
+`webview` has issues being hidden using the `hidden` attribute or using
+`display: none;`. It can cause unusual rendering behaviour within its child
+`browserplugin` object and the web page is reloaded when the `webview` is
+un-hidden. The recommended approach is to hide the `webview` using
+`visibility: hidden`.
 
 ```html
 <style>
@@ -75,9 +74,7 @@ dimensions via `flex`.
     height:480px;
   }
   webview.hide {
-    flex: 0 1;
-    width: 0px;
-    height: 0px;
+    visibility: hidden;
   }
 </style>
 ```
@@ -103,14 +100,15 @@ The `src` attribute can also accept data URLs, such as
 ### `autosize`
 
 ```html
-<webview src="https://www.github.com/" autosize="on" minwidth="576" minheight="432"></webview>
+<webview src="https://www.github.com/" autosize minwidth="576" minheight="432"></webview>
 ```
 
-If "on", the `webview` container will automatically resize within the
-bounds specified by the attributes `minwidth`, `minheight`, `maxwidth`, and
-`maxheight`. These constraints do not impact the `webview` unless `autosize` is
-enabled. When `autosize` is enabled, the `webview` container size cannot be less
-than the minimum values or greater than the maximum.
+When this attribute is present the `webview` container will automatically resize
+within the bounds specified by the attributes `minwidth`, `minheight`,
+`maxwidth`, and `maxheight`. These constraints do not impact the `webview`
+unless `autosize` is enabled. When `autosize` is enabled, the `webview`
+container size cannot be less than the minimum values or greater than the
+maximum.
 
 ### `nodeintegration`
 
@@ -118,8 +116,10 @@ than the minimum values or greater than the maximum.
 <webview src="http://www.google.com/" nodeintegration></webview>
 ```
 
-If "on", the guest page in `webview` will have node integration and can use node
-APIs like `require` and `process` to access low level system resources.
+When this attribute is present the guest page in `webview` will have node
+integration and can use node APIs like `require` and `process` to access low
+level system resources. Node integration is disabled by default in the guest
+page.
 
 ### `plugins`
 
@@ -127,7 +127,8 @@ APIs like `require` and `process` to access low level system resources.
 <webview src="https://www.github.com/" plugins></webview>
 ```
 
-If "on", the guest page in `webview` will be able to use browser plugins.
+When this attribute is present the guest page in `webview` will be able to use
+browser plugins. Plugins are disabled by default.
 
 ### `preload`
 
@@ -142,6 +143,9 @@ will be loaded by `require` in guest page under the hood.
 When the guest page doesn't have node integration this script will still have
 access to all Node APIs, but global objects injected by Node will be deleted
 after this script has finished executing.
+
+**Note:** This option will be appear as `preloadURL` (not `preload`) in
+the `webPreferences` specified to the `will-attach-webview` event.
 
 ### `httpreferrer`
 
@@ -166,13 +170,14 @@ page is loaded, use the `setUserAgent` method to change the user agent.
 <webview src="https://www.github.com/" disablewebsecurity></webview>
 ```
 
-If "on", the guest page will have web security disabled.
+When this attribute is present the guest page will have web security disabled.
+Web security is enabled by default.
 
 ### `partition`
 
 ```html
 <webview src="https://github.com" partition="persist:github"></webview>
-<webview src="http://electron.atom.io" partition="electron"></webview>
+<webview src="https://electron.atom.io" partition="electron"></webview>
 ```
 
 Sets the session used by the page. If `partition` starts with `persist:`, the
@@ -192,12 +197,13 @@ value will fail with a DOM exception.
 <webview src="https://www.github.com/" allowpopups></webview>
 ```
 
-If "on", the guest page will be allowed to open new windows.
+When this attribute is present the guest page will be allowed to open new
+windows. Popups are disabled by default.
 
 ### `webpreferences`
 
 ```html
-<webview src="https://github.com" webpreferences="allowDisplayingInsecureContent, javascript=no"></webview>
+<webview src="https://github.com" webpreferences="allowRunningInsecureContent, javascript=no"></webview>
 ```
 
 A list of strings which specifies the web preferences to be set on the webview, separated by `,`.
@@ -206,7 +212,7 @@ The full list of supported preference strings can be found in [BrowserWindow](br
 The string follows the same format as the features string in `window.open`.
 A name by itself is given a `true` boolean value.
 A preference can be set to another value by including an `=`, followed by the value.
-Special values `yes` and `1` are interpreted as `true`, while `no` and `0` are interpreted as `false`.  
+Special values `yes` and `1` are interpreted as `true`, while `no` and `0` are interpreted as `false`.
 
 ### `blinkfeatures`
 
@@ -216,7 +222,7 @@ Special values `yes` and `1` are interpreted as `true`, while `no` and `0` are i
 
 A list of strings which specifies the blink features to be enabled separated by `,`.
 The full list of supported feature strings can be found in the
-[RuntimeEnabledFeatures.in][blink-feature-string] file.
+[RuntimeEnabledFeatures.json5][blink-feature-string] file.
 
 ### `disableblinkfeatures`
 
@@ -226,7 +232,7 @@ The full list of supported feature strings can be found in the
 
 A list of strings which specifies the blink features to be disabled separated by `,`.
 The full list of supported feature strings can be found in the
-[RuntimeEnabledFeatures.in][blink-feature-string] file.
+[RuntimeEnabledFeatures.json5][blink-feature-string] file.
 
 ### `guestinstance`
 
@@ -249,8 +255,8 @@ webContents when a new url is loaded.
 <webview src="https://www.github.com/" disableguestresize></webview>
 ```
 
-Prevents the webview contents from resizing when the webview element itself is
-resized.
+When this attribute is present the `webview` contents will be prevented from
+resizing when the `webview` element itself is resized.
 
 This can be used in combination with
 [`webContents.setSize`](web-contents.md#contentssetsizeoptions) to manually
@@ -290,7 +296,7 @@ The `webview` tag has the following methods:
 **Example**
 
 ```javascript
-const webview = document.getElementById('foo')
+const webview = document.querySelector('webview')
 webview.addEventListener('dom-ready', () => {
   webview.openDevTools()
 })
@@ -303,7 +309,8 @@ webview.addEventListener('dom-ready', () => {
   * `httpReferrer` String (optional) - A HTTP Referrer url.
   * `userAgent` String (optional) - A user agent originating the request.
   * `extraHeaders` String (optional) - Extra headers separated by "\n"
-  * `postData` ([UploadRawData](structures/upload-raw-data.md) | [UploadFile](structures/upload-file.md) | [UploadFileSystem](structures/upload-file-system.md) | [UploadBlob](structures/upload-blob.md))[] - (optional)
+  * `postData` ([UploadRawData[]](structures/upload-raw-data.md) | [UploadFile[]](structures/upload-file.md) | [UploadFileSystem[]](structures/upload-file-system.md) | [UploadBlob[]](structures/upload-blob.md)) - (optional)
+  * `baseURLForDataURL` String (optional) - Base url (with trailing path separator) for files to be loaded by the data url. This is needed only if the specified `url` is a data url and needs to load other files.
 
 Loads the `url` in the webview, the `url` must contain the protocol prefix,
 e.g. the `http://` or `file://`.
@@ -501,14 +508,14 @@ Inserts `text` to the focused element.
 
 * `text` String - Content to be searched, must not be empty.
 * `options` Object (optional)
-  * `forward` Boolean - Whether to search forward or backward, defaults to `true`.
-  * `findNext` Boolean - Whether the operation is first request or a follow up,
+  * `forward` Boolean - (optional) Whether to search forward or backward, defaults to `true`.
+  * `findNext` Boolean - (optional) Whether the operation is first request or a follow up,
     defaults to `false`.
-  * `matchCase` Boolean - Whether search should be case-sensitive,
+  * `matchCase` Boolean - (optional) Whether search should be case-sensitive,
     defaults to `false`.
-  * `wordStart` Boolean - Whether to look only at the start of words.
+  * `wordStart` Boolean - (optional) Whether to look only at the start of words.
     defaults to `false`.
-  * `medialCapitalAsWordStart` Boolean - When combined with `wordStart`,
+  * `medialCapitalAsWordStart` Boolean - (optional) When combined with `wordStart`,
     accepts a match in the middle of a word if the match begins with an
     uppercase letter followed by a lowercase or non-letter.
     Accepts several other intra-word matches, defaults to `false`.
@@ -529,20 +536,43 @@ Stops any `findInPage` request for the `webview` with the provided `action`.
 
 ### `<webview>.print([options])`
 
+* `options` Object (optional)
+  * `silent` Boolean (optional) - Don't ask user for print settings. Default is `false`.
+  * `printBackground` Boolean (optional) - Also prints the background color and image of
+    the web page. Default is `false`.
+  * `deviceName` String (optional) - Set the printer device name to use. Default is `''`.
+
 Prints `webview`'s web page. Same as `webContents.print([options])`.
 
 ### `<webview>.printToPDF(options, callback)`
 
+* `options` Object
+  * `marginsType` Integer - (optional) Specifies the type of margins to use. Uses 0 for
+    default margin, 1 for no margin, and 2 for minimum margin.
+  * `pageSize` String - (optional) Specify page size of the generated PDF. Can be `A3`,
+    `A4`, `A5`, `Legal`, `Letter`, `Tabloid` or an Object containing `height`
+    and `width` in microns.
+  * `printBackground` Boolean - (optional) Whether to print CSS backgrounds.
+  * `printSelectionOnly` Boolean - (optional) Whether to print selection only.
+  * `landscape` Boolean - (optional) `true` for landscape, `false` for portrait.
+* `callback` Function
+  * `error` Error
+  * `data` Buffer
+
 Prints `webview`'s web page as PDF, Same as `webContents.printToPDF(options, callback)`.
 
 ### `<webview>.capturePage([rect, ]callback)`
+
+* `rect` [Rectangle](structures/rectangle.md) (optional) - The area of the page to be captured
+* `callback` Function
+  * `image` [NativeImage](native-image.md)
 
 Captures a snapshot of the `webview`'s page. Same as `webContents.capturePage([rect, ]callback)`.
 
 ### `<webview>.send(channel[, arg1][, arg2][, ...])`
 
 * `channel` String
-* `arg` (optional)
+* `...args` any[]
 
 Send an asynchronous message to renderer process via `channel`, you can also
 send arbitrary arguments. The renderer process can handle the message by
@@ -703,7 +733,7 @@ The following example code forwards all log messages to the embedder's console
 without regard for log level or other properties.
 
 ```javascript
-const webview = document.getElementById('foo')
+const webview = document.querySelector('webview')
 webview.addEventListener('console-message', (e) => {
   console.log('Guest page logged a message:', e.message)
 })
@@ -718,12 +748,13 @@ Returns:
   * `activeMatchOrdinal` Integer - Position of the active match.
   * `matches` Integer - Number of Matches.
   * `selectionArea` Object - Coordinates of first match region.
+  * `finalUpdate` Boolean
 
 Fired when a result is available for
 [`webview.findInPage`](webview-tag.md#webviewtagfindinpage) request.
 
 ```javascript
-const webview = document.getElementById('foo')
+const webview = document.querySelector('webview')
 webview.addEventListener('found-in-page', (e) => {
   webview.stopFindInPage('keepSelection')
 })
@@ -749,7 +780,7 @@ The following example code opens the new url in system's default browser.
 
 ```javascript
 const {shell} = require('electron')
-const webview = document.getElementById('foo')
+const webview = document.querySelector('webview')
 
 webview.addEventListener('new-window', (e) => {
   const protocol = require('url').parse(e.url).protocol
@@ -810,7 +841,7 @@ The following example code navigates the `webview` to `about:blank` when the
 guest attempts to close itself.
 
 ```javascript
-const webview = document.getElementById('foo')
+const webview = document.querySelector('webview')
 webview.addEventListener('close', () => {
   webview.src = 'about:blank'
 })
@@ -830,7 +861,7 @@ between guest page and embedder page:
 
 ```javascript
 // In embedder page.
-const webview = document.getElementById('foo')
+const webview = document.querySelector('webview')
 webview.addEventListener('ipc-message', (event) => {
   console.log(event.channel)
   // Prints "pong"
@@ -907,4 +938,4 @@ Emitted when DevTools is closed.
 
 Emitted when DevTools is focused / opened.
 
-[blink-feature-string]: https://cs.chromium.org/chromium/src/third_party/WebKit/Source/platform/RuntimeEnabledFeatures.in
+[blink-feature-string]: https://cs.chromium.org/chromium/src/third_party/WebKit/Source/platform/RuntimeEnabledFeatures.json5?l=62

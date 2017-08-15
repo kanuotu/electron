@@ -43,14 +43,18 @@ void CrashReporterMac::InitBreakpad(const std::string& product_name,
       base::FilePath handler_path =
           framework_bundle_path.Append("Resources").Append("crashpad_handler");
 
+      std::vector<std::string> args = {
+        "--no-rate-limit",
+        "--no-upload-gzip",  // not all servers accept gzip
+      };
+
       crashpad::CrashpadClient crashpad_client;
-      if (crashpad_client.StartHandler(handler_path, crashes_dir,
-                                       submit_url,
-                                       StringMap(),
-                                       std::vector<std::string>(),
-                                       true)) {
-        crashpad_client.UseHandler();
-      }
+      crashpad_client.StartHandler(handler_path, crashes_dir, crashes_dir,
+                                   submit_url,
+                                   StringMap(),
+                                   args,
+                                   true,
+                                   false);
     }  // @autoreleasepool
   }
 
@@ -99,6 +103,21 @@ void CrashReporterMac::SetUploadParameters() {
 void CrashReporterMac::SetCrashKeyValue(const base::StringPiece& key,
                                         const base::StringPiece& value) {
   simple_string_dictionary_->SetKeyValue(key.data(), value.data());
+}
+
+void CrashReporterMac::SetExtraParameter(const std::string& key,
+                                         const std::string& value) {
+  if (simple_string_dictionary_)
+    SetCrashKeyValue(key, value);
+  else
+    upload_parameters_[key] = value;
+}
+
+void CrashReporterMac::RemoveExtraParameter(const std::string& key) {
+  if (simple_string_dictionary_)
+    simple_string_dictionary_->RemoveKey(key.data());
+  else
+    upload_parameters_.erase(key);
 }
 
 std::vector<CrashReporter::UploadReportResult>

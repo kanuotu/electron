@@ -48,8 +48,14 @@ const char kUseContentSize[] = "useContentSize";
 // Whether window zoom should be to page width.
 const char kZoomToPageWidth[] = "zoomToPageWidth";
 
+// Whether always show title text in full screen is enabled.
+const char kFullscreenWindowTitle[] = "fullscreenWindowTitle";
+
 // The requested title bar style for the window
 const char kTitleBarStyle[] = "titleBarStyle";
+
+// Tabbing identifier for the window if native tabs are enabled on macOS.
+const char kTabbingIdentifier[] = "tabbingIdentifier";
 
 // The menu bar is hidden unless "Alt" is pressed.
 const char kAutoHideMenuBar[] = "autoHideMenuBar";
@@ -99,7 +105,10 @@ const char kPreloadURL[] = "preloadURL";
 // Enable the node integration.
 const char kNodeIntegration[] = "nodeIntegration";
 
-// Instancd ID of guest WebContents.
+// Enable context isolation of Electron APIs and preload script
+const char kContextIsolation[] = "contextIsolation";
+
+// Instance ID of guest WebContents.
 const char kGuestInstanceID[] = "guestInstanceId";
 
 // Web runtime features.
@@ -119,12 +128,21 @@ const char kBlinkFeatures[] = "blinkFeatures";
 // Disable blink features.
 const char kDisableBlinkFeatures[] = "disableBlinkFeatures";
 
+// Enable the node integration in WebWorker.
+const char kNodeIntegrationInWorker[] = "nodeIntegrationInWorker";
+
+// Enable the web view tag.
+const char kWebviewTag[] = "webviewTag";
+
 }  // namespace options
 
 namespace switches {
 
 // Enable chromium sandbox.
 const char kEnableSandbox[] = "enable-sandbox";
+
+// Enable sandbox in only remote content windows.
+const char kEnableMixedSandbox[] = "enable-mixed-sandbox";
 
 // Enable plugins.
 const char kEnablePlugins[] = "enable-plugins";
@@ -147,25 +165,27 @@ const char kRegisterServiceWorkerSchemes[] = "register-service-worker-schemes";
 // Register schemes as secure.
 const char kSecureSchemes[] = "secure-schemes";
 
-// The minimum SSL/TLS version ("tls1", "tls1.1", or "tls1.2") that
-// TLS fallback will accept.
-const char kSSLVersionFallbackMin[] = "ssl-version-fallback-min";
-
-// Comma-separated list of SSL cipher suites to disable.
-const char kCipherSuiteBlacklist[] = "cipher-suite-blacklist";
-
 // The browser process app model ID
 const char kAppUserModelId[] = "app-user-model-id";
 
+// The application path
+const char kAppPath[] = "app-path";
+
 // The command line switch versions of the options.
-const char kBackgroundColor[] = "background-color";
-const char kZoomFactor[]      = "zoom-factor";
-const char kPreloadScript[]   = "preload";
-const char kPreloadURL[]      = "preload-url";
-const char kNodeIntegration[] = "node-integration";
-const char kGuestInstanceID[] = "guest-instance-id";
-const char kOpenerID[]        = "opener-id";
-const char kScrollBounce[]    = "scroll-bounce";
+const char kBackgroundColor[]  = "background-color";
+const char kPreloadScript[]    = "preload";
+const char kPreloadURL[]       = "preload-url";
+const char kNodeIntegration[]  = "node-integration";
+const char kContextIsolation[] = "context-isolation";
+const char kGuestInstanceID[]  = "guest-instance-id";
+const char kOpenerID[]         = "opener-id";
+const char kScrollBounce[]     = "scroll-bounce";
+const char kHiddenPage[]       = "hidden-page";
+const char kNativeWindowOpen[] = "native-window-open";
+const char kWebviewTag[]       = "webview-tag";
+
+// Command switch passed to renderer process to control nodeIntegration.
+const char kNodeIntegrationInWorker[]  = "node-integration-in-worker";
 
 // Widevine options
 // Path to Widevine CDM binaries.

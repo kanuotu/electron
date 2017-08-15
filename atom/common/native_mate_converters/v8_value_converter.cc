@@ -129,6 +129,7 @@ class V8ValueConverter::ScopedUniquenessGuard {
 V8ValueConverter::V8ValueConverter()
     : reg_exp_allowed_(false),
       function_allowed_(false),
+      disable_node_(false),
       strip_null_from_objects_(false) {}
 
 void V8ValueConverter::SetRegExpAllowed(bool val) {
@@ -141,6 +142,10 @@ void V8ValueConverter::SetFunctionAllowed(bool val) {
 
 void V8ValueConverter::SetStripNullFromObjects(bool val) {
   strip_null_from_objects_ = val;
+}
+
+void V8ValueConverter::SetDisableNode(bool val) {
+  disable_node_ = val;
 }
 
 v8::Local<v8::Value> V8ValueConverter::ToV8Value(
@@ -162,42 +167,42 @@ base::Value* V8ValueConverter::FromV8Value(
 v8::Local<v8::Value> V8ValueConverter::ToV8ValueImpl(
      v8::Isolate* isolate, const base::Value* value) const {
   switch (value->GetType()) {
-    case base::Value::TYPE_NULL:
+    case base::Value::Type::NONE:
       return v8::Null(isolate);
 
-    case base::Value::TYPE_BOOLEAN: {
+    case base::Value::Type::BOOLEAN: {
       bool val = false;
       value->GetAsBoolean(&val);
       return v8::Boolean::New(isolate, val);
     }
 
-    case base::Value::TYPE_INTEGER: {
+    case base::Value::Type::INTEGER: {
       int val = 0;
       value->GetAsInteger(&val);
       return v8::Integer::New(isolate, val);
     }
 
-    case base::Value::TYPE_DOUBLE: {
+    case base::Value::Type::DOUBLE: {
       double val = 0.0;
       value->GetAsDouble(&val);
       return v8::Number::New(isolate, val);
     }
 
-    case base::Value::TYPE_STRING: {
+    case base::Value::Type::STRING: {
       std::string val;
       value->GetAsString(&val);
       return v8::String::NewFromUtf8(
           isolate, val.c_str(), v8::String::kNormalString, val.length());
     }
 
-    case base::Value::TYPE_LIST:
+    case base::Value::Type::LIST:
       return ToV8Array(isolate, static_cast<const base::ListValue*>(value));
 
-    case base::Value::TYPE_DICTIONARY:
+    case base::Value::Type::DICTIONARY:
       return ToV8Object(isolate,
                         static_cast<const base::DictionaryValue*>(value));
 
-    case base::Value::TYPE_BINARY:
+    case base::Value::Type::BINARY:
       return ToArrayBuffer(isolate,
                            static_cast<const base::BinaryValue*>(value));
 
@@ -249,9 +254,49 @@ v8::Local<v8::Value> V8ValueConverter::ToV8Object(
 
 v8::Local<v8::Value> V8ValueConverter::ToArrayBuffer(
     v8::Isolate* isolate, const base::BinaryValue* value) const {
-  return node::Buffer::Copy(isolate,
-                            value->GetBuffer(),
-                            value->GetSize()).ToLocalChecked();
+  const char* data = value->GetBuffer();
+  size_t length = value->GetSize();
+
+  if (!disable_node_) {
+    return node::Buffer::Copy(isolate, data, length).ToLocalChecked();
+  }
+
+  if (length > node::Buffer::kMaxLength) {
+    return v8::Local<v8::Object>();
+  }
+  auto context = isolate->GetCurrentContext();
+  auto array_buffer = v8::ArrayBuffer::New(isolate, length);
+  memcpy(array_buffer->GetContents().Data(), data, length);
+  // From this point, if something goes wrong(can't find Buffer class for
+  // example) we'll simply return a Uint8Array based on the created ArrayBuffer.
+  // This can happen if no preload script was specified to the renderer.
+  mate::Dictionary global(isolate, context->Global());
+  v8::Local<v8::Value> buffer_value;
+
+  // Get the Buffer class stored as a hidden value in the global object. We'll
+  // use it return a browserified Buffer.
+  if (!global.GetHidden("Buffer", &buffer_value) ||
+      !buffer_value->IsFunction()) {
+    return v8::Uint8Array::New(array_buffer, 0, length);
+  }
+
+  mate::Dictionary buffer_class(isolate, buffer_value->ToObject());
+  v8::Local<v8::Value> from_value;
+  if (!buffer_class.Get("from", &from_value) ||
+      !from_value->IsFunction()) {
+    return v8::Uint8Array::New(array_buffer, 0, length);
+  }
+
+  v8::Local<v8::Value> args[] = {
+    array_buffer
+  };
+  auto func = v8::Local<v8::Function>::Cast(from_value);
+  auto result = func->Call(context, v8::Null(isolate), 1, args);
+  if (!result.IsEmpty()) {
+    return result.ToLocalChecked();
+  }
+
+  return v8::Uint8Array::New(array_buffer, 0, length);
 }
 
 base::Value* V8ValueConverter::FromV8ValueImpl(
@@ -269,13 +314,13 @@ base::Value* V8ValueConverter::FromV8ValueImpl(
     return base::Value::CreateNullValue().release();
 
   if (val->IsBoolean())
-    return new base::FundamentalValue(val->ToBoolean()->Value());
+    return new base::Value(val->ToBoolean()->Value());
 
   if (val->IsInt32())
-    return new base::FundamentalValue(val->ToInt32()->Value());
+    return new base::Value(val->ToInt32()->Value());
 
   if (val->IsNumber())
-    return new base::FundamentalValue(val->ToNumber()->Value());
+    return new base::Value(val->ToNumber()->Value());
 
   if (val->IsString()) {
     v8::String::Utf8Value utf8(val->ToString());
@@ -361,7 +406,7 @@ base::Value* V8ValueConverter::FromV8Array(
 
     base::Value* child = FromV8ValueImpl(state, child_v8, isolate);
     if (child)
-      result->Append(child);
+      result->Append(std::unique_ptr<base::Value>(child));
     else
       // JSON.stringify puts null in places where values don't serialize, for
       // example undefined and functions. Emulate that behavior.
@@ -445,7 +490,7 @@ base::Value* V8ValueConverter::FromV8Object(
     // there *is* a "windowId" property, but since it should be an int, code
     // on the browser which doesn't additionally check for null will fail.
     // We can avoid all bugs related to this by stripping null.
-    if (strip_null_from_objects_ && child->IsType(base::Value::TYPE_NULL))
+    if (strip_null_from_objects_ && child->IsType(base::Value::Type::NONE))
       continue;
 
     result->SetWithoutPathExpansion(std::string(*name_utf8, name_utf8.length()),

@@ -10,10 +10,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
 
-@interface NSWindow (SierraSDK)
-@property(class) BOOL allowsAutomaticWindowTabbing;
-@end
-
 @implementation AtomApplicationDelegate
 
 - (void)setApplicationDockMenu:(atom::AtomMenuModel*)model {
@@ -24,10 +20,6 @@
 - (void)applicationWillFinishLaunching:(NSNotification*)notify {
   // Don't add the "Enter Full Screen" menu item automatically.
   [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"NSFullScreenMenuItemEverywhere"];
-
-  // Don't add the "Show Tab Bar" menu item.
-  if ([NSWindow respondsToSelector:@selector(allowsAutomaticWindowTabbing)])
-    NSWindow.allowsAutomaticWindowTabbing = NO;
 
   atom::Browser::Get()->WillFinishLaunching();
 }
@@ -87,6 +79,10 @@ continueUserActivity:(NSUserActivity*)userActivity
 
   atom::Browser* browser = atom::Browser::Get();
   return browser->ContinueUserActivity(activity_type, *user_info) ? YES : NO;
+}
+
+- (IBAction)newWindowForTab:(id)sender {
+  atom::Browser::Get()->NewWindowForTab();
 }
 
 @end

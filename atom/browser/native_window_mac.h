@@ -67,9 +67,11 @@ class NativeWindowMac : public NativeWindow,
   bool IsFullScreenable() override;
   void SetClosable(bool closable) override;
   bool IsClosable() override;
-  void SetAlwaysOnTop(bool top, const std::string& level) override;
+  void SetAlwaysOnTop(bool top, const std::string& level,
+                      int relativeLevel, std::string* error) override;
   bool IsAlwaysOnTop() override;
   void Center() override;
+  void Invalidate() override;
   void SetTitle(const std::string& title) override;
   std::string GetTitle() override;
   void FlashFrame(bool flash) override;
@@ -85,9 +87,11 @@ class NativeWindowMac : public NativeWindow,
   bool IsDocumentEdited() override;
   void SetIgnoreMouseEvents(bool ignore) override;
   void SetContentProtection(bool enable) override;
+  void SetBrowserView(NativeBrowserView* browser_view) override;
   void SetParentWindow(NativeWindow* parent) override;
-  gfx::NativeWindow GetNativeWindow() override;
-  gfx::AcceleratedWidget GetAcceleratedWidget() override;
+  gfx::NativeView GetNativeView() const override;
+  gfx::NativeWindow GetNativeWindow() const override;
+  gfx::AcceleratedWidget GetAcceleratedWidget() const override;
   void SetProgressBar(double progress, const ProgressState state) override;
   void SetOverlayIcon(const gfx::Image& overlay,
                       const std::string& description) override;
@@ -98,6 +102,10 @@ class NativeWindowMac : public NativeWindow,
   void SetAutoHideCursor(bool auto_hide) override;
 
   void SetVibrancy(const std::string& type) override;
+  void SetTouchBar(
+      const std::vector<mate::PersistentDictionary>& items) override;
+  void RefreshTouchBarItem(const std::string& item_id) override;
+  void SetEscapeTouchBarItem(const mate::PersistentDictionary& item) override;
 
   // content::RenderWidgetHost::InputEventObserver:
   void OnInputEvent(const blink::WebInputEvent& event) override;
@@ -119,10 +127,13 @@ class NativeWindowMac : public NativeWindow,
     NORMAL,
     HIDDEN,
     HIDDEN_INSET,
+    CUSTOM_BUTTONS_ON_HOVER,
   };
   TitleBarStyle title_bar_style() const { return title_bar_style_; }
 
   bool zoom_to_page_width() const { return zoom_to_page_width_; }
+
+  bool fullscreen_window_title() const { return fullscreen_window_title_; }
 
  protected:
   // Return a vector of non-draggable regions that fill a window of size
@@ -132,8 +143,8 @@ class NativeWindowMac : public NativeWindow,
 
  private:
   // NativeWindow:
-  gfx::Rect ContentBoundsToWindowBounds(const gfx::Rect& bounds);
-  gfx::Rect WindowBoundsToContentBounds(const gfx::Rect& bounds);
+  gfx::Rect ContentBoundsToWindowBounds(const gfx::Rect& bounds) const;
+  gfx::Rect WindowBoundsToContentBounds(const gfx::Rect& bounds) const;
   void UpdateDraggableRegions(
       const std::vector<DraggableRegion>& regions) override;
 
@@ -158,11 +169,17 @@ class NativeWindowMac : public NativeWindow,
   // The view that will fill the whole frameless window.
   base::scoped_nsobject<FullSizeContentView> content_view_;
 
+  NativeBrowserView* browser_view_;
+
   std::vector<DraggableRegion> draggable_regions_;
 
   bool is_kiosk_;
 
+  bool was_fullscreen_;
+
   bool zoom_to_page_width_;
+
+  bool fullscreen_window_title_;
 
   NSInteger attention_request_id_;  // identifier from requestUserAttention
 

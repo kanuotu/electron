@@ -10,8 +10,8 @@ import sys
 import tempfile
 
 from io import StringIO
-from lib.config import PLATFORM, get_target_arch, get_chromedriver_version, \
-                       get_env_var, s3_config, get_zip_name
+from lib.config import PLATFORM, get_target_arch,  get_env_var, s3_config, \
+                       get_zip_name
 from lib.util import electron_gyp, execute, get_electron_version, \
                      parse_version, scoped_cwd, s3put
 from lib.github import GitHub
@@ -72,6 +72,8 @@ def main():
     # Press the publish button.
     publish_release(github, release['id'])
 
+    # TODO: run publish-to-npm script here
+
     # Do not upload other files when passed "-p".
     return
 
@@ -81,6 +83,7 @@ def main():
   if PLATFORM == 'darwin':
     upload_electron(github, release, os.path.join(DIST_DIR,
                     'electron-api.json'))
+    upload_electron(github, release, os.path.join(DIST_DIR, 'electron.d.ts'))
     upload_electron(github, release, os.path.join(DIST_DIR, DSYM_NAME))
   elif PLATFORM == 'win32':
     upload_electron(github, release, os.path.join(DIST_DIR, PDB_NAME))
@@ -91,7 +94,7 @@ def main():
 
   # Upload chromedriver and mksnapshot for minor version update.
   if parse_version(args.version)[2] == '0':
-    chromedriver = get_zip_name('chromedriver', get_chromedriver_version())
+    chromedriver = get_zip_name('chromedriver', ELECTRON_VERSION)
     upload_electron(github, release, os.path.join(DIST_DIR, chromedriver))
     mksnapshot = get_zip_name('mksnapshot', ELECTRON_VERSION)
     upload_electron(github, release, os.path.join(DIST_DIR, mksnapshot))
@@ -101,6 +104,7 @@ def main():
     run_python_script('upload-windows-pdb.py')
 
     # Upload node headers.
+    run_python_script('create-node-headers.py', '-v', args.version)
     run_python_script('upload-node-headers.py', '-v', args.version)
 
 
@@ -180,7 +184,7 @@ def create_or_get_release_draft(github, releases, tag, tag_exists):
 
 
 def create_release_draft(github, tag):
-  name = '{0} {1}'.format(PROJECT_NAME, tag)
+  name = '{0} {1} beta'.format(PROJECT_NAME, tag)
   if os.environ.has_key('CI'):
     body = '(placeholder)'
   else:
@@ -189,7 +193,7 @@ def create_release_draft(github, tag):
     sys.stderr.write('Quit due to empty release note.\n')
     sys.exit(0)
 
-  data = dict(tag_name=tag, name=name, body=body, draft=True)
+  data = dict(tag_name=tag, name=name, body=body, draft=True, prerelease=True)
   r = github.repos(ELECTRON_REPO).releases.post(data=data)
   return r
 

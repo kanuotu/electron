@@ -5,10 +5,12 @@
 #include "atom/browser/api/atom_api_window.h"
 #include "atom/common/native_mate_converters/value_converter.h"
 
+#include "atom/browser/api/atom_api_browser_view.h"
 #include "atom/browser/api/atom_api_menu.h"
 #include "atom/browser/api/atom_api_web_contents.h"
 #include "atom/browser/browser.h"
 #include "atom/browser/native_window.h"
+#include "atom/browser/web_contents_preferences.h"
 #include "atom/common/native_mate_converters/callback.h"
 #include "atom/common/native_mate_converters/file_path_converter.h"
 #include "atom/common/native_mate_converters/gfx_converter.h"
@@ -17,6 +19,7 @@
 #include "atom/common/native_mate_converters/string16_converter.h"
 #include "atom/common/options_switches.h"
 #include "base/command_line.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_switches.h"
 #include "native_mate/constructor.h"
@@ -75,21 +78,43 @@ v8::Local<v8::Value> ToBuffer(v8::Isolate* isolate, void* val, int size) {
 Window::Window(v8::Isolate* isolate, v8::Local<v8::Object> wrapper,
                const mate::Dictionary& options) {
   mate::Handle<class WebContents> web_contents;
-  // If no WebContents was passed to the constructor, create it from options.
-  if (!options.Get("webContents", &web_contents)) {
-    // Use options.webPreferences to create WebContents.
-    mate::Dictionary web_preferences = mate::Dictionary::CreateEmpty(isolate);
-    options.Get(options::kWebPreferences, &web_preferences);
 
-    // Copy the backgroundColor to webContents.
-    v8::Local<v8::Value> value;
-    if (options.Get(options::kBackgroundColor, &value))
-      web_preferences.Set(options::kBackgroundColor, value);
+  // Use options.webPreferences in WebContents.
+  mate::Dictionary web_preferences = mate::Dictionary::CreateEmpty(isolate);
+  options.Get(options::kWebPreferences, &web_preferences);
 
-    v8::Local<v8::Value> transparent;
-    if (options.Get("transparent", &transparent))
-      web_preferences.Set("transparent", transparent);
+  // Copy the backgroundColor to webContents.
+  v8::Local<v8::Value> value;
+  if (options.Get(options::kBackgroundColor, &value))
+    web_preferences.Set(options::kBackgroundColor, value);
 
+  v8::Local<v8::Value> transparent;
+  if (options.Get("transparent", &transparent))
+    web_preferences.Set("transparent", transparent);
+
+#if defined(ENABLE_OSR)
+  // Offscreen windows are always created frameless.
+  bool offscreen;
+  if (web_preferences.Get("offscreen", &offscreen) && offscreen) {
+    auto window_options = const_cast<mate::Dictionary&>(options);
+    window_options.Set(options::kFrame, false);
+  }
+#endif
+
+  if (options.Get("webContents", &web_contents)) {
+    // Set webPreferences from options if using an existing webContents.
+    // These preferences will be used when the webContent launches new
+    // render processes.
+    auto* existing_preferences =
+        WebContentsPreferences::FromWebContents(web_contents->web_contents());
+    base::DictionaryValue web_preferences_dict;
+    if (mate::ConvertFromV8(isolate, web_preferences.GetHandle(),
+                        &web_preferences_dict)) {
+      existing_preferences->web_preferences()->Clear();
+      existing_preferences->Merge(web_preferences_dict);
+    }
+
+  } else {
     // Creates the WebContents used by BrowserWindow.
     web_contents = WebContents::Create(isolate, web_preferences);
   }
@@ -145,7 +170,7 @@ Window::~Window() {
 
   // Destroy the native window in next tick because the native code might be
   // iterating all windows.
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, window_.release());
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, window_.release());
 }
 
 void Window::WillCloseWindow(bool* prevent_default) {
@@ -164,7 +189,7 @@ void Window::WillDestroyNativeObject() {
 }
 
 void Window::OnWindowClosed() {
-  api_web_contents_->DestroyWebContents();
+  api_web_contents_->DestroyWebContents(true /* async */);
 
   RemoveFromWeakMap();
   window_->RemoveObserver(this);
@@ -177,8 +202,15 @@ void Window::OnWindowClosed() {
 
   RemoveFromParentChildWindows();
 
+  ResetBrowserView();
+
   // Destroy the native class when window is closed.
-  base::MessageLoop::current()->PostTask(FROM_HERE, GetDestroyClosure());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, GetDestroyClosure());
+}
+
+void Window::OnWindowEndSession() {
+  Emit("session-end");
 }
 
 void Window::OnWindowBlur() {
@@ -253,6 +285,14 @@ void Window::OnWindowSwipe(const std::string& direction) {
   Emit("swipe", direction);
 }
 
+void Window::OnWindowSheetBegin() {
+  Emit("sheet-begin");
+}
+
+void Window::OnWindowSheetEnd() {
+  Emit("sheet-end");
+}
+
 void Window::OnWindowEnterHtmlFullScreen() {
   Emit("enter-html-full-screen");
 }
@@ -271,6 +311,15 @@ void Window::OnRendererResponsive() {
 
 void Window::OnExecuteWindowsCommand(const std::string& command_name) {
   Emit("app-command", command_name);
+}
+
+void Window::OnTouchBarItemResult(const std::string& item_id,
+                                  const base::DictionaryValue& details) {
+  Emit("-touch-bar-interaction", item_id, details);
+}
+
+void Window::OnNewWindowForTab() {
+  Emit("new-window-for-tab");
 }
 
 #if defined(OS_WIN)
@@ -503,8 +552,17 @@ bool Window::IsClosable() {
 
 void Window::SetAlwaysOnTop(bool top, mate::Arguments* args) {
   std::string level = "floating";
+  int relativeLevel = 0;
+  std::string error;
+
   args->GetNext(&level);
-  window_->SetAlwaysOnTop(top, level);
+  args->GetNext(&relativeLevel);
+
+  window_->SetAlwaysOnTop(top, level, relativeLevel, &error);
+
+  if (!error.empty()) {
+    args->ThrowError(error);
+  }
 }
 
 bool Window::IsAlwaysOnTop() {
@@ -793,6 +851,40 @@ std::vector<v8::Local<v8::Object>> Window::GetChildWindows() const {
   return child_windows_.Values(isolate());
 }
 
+v8::Local<v8::Value> Window::GetBrowserView() const {
+  if (browser_view_.IsEmpty()) {
+    return v8::Null(isolate());
+  }
+
+  return v8::Local<v8::Value>::New(isolate(), browser_view_);
+}
+
+void Window::SetBrowserView(v8::Local<v8::Value> value) {
+  ResetBrowserView();
+
+  mate::Handle<BrowserView> browser_view;
+  if (value->IsNull()) {
+    window_->SetBrowserView(nullptr);
+  } else if (mate::ConvertFromV8(isolate(), value, &browser_view)) {
+    window_->SetBrowserView(browser_view->view());
+    browser_view->web_contents()->SetOwnerWindow(window_.get());
+    browser_view_.Reset(isolate(), value);
+  }
+}
+
+void Window::ResetBrowserView() {
+  if (browser_view_.IsEmpty()) {
+    return;
+  }
+
+  mate::Handle<BrowserView> browser_view;
+  if (mate::ConvertFromV8(isolate(), GetBrowserView(), &browser_view)) {
+    browser_view->web_contents()->SetOwnerWindow(nullptr);
+  }
+
+  browser_view_.Reset();
+}
+
 bool Window::IsModal() const {
   return window_->is_modal();
 }
@@ -822,15 +914,28 @@ void Window::SetVibrancy(mate::Arguments* args) {
   window_->SetVibrancy(type);
 }
 
+void Window::SetTouchBar(const std::vector<mate::PersistentDictionary>& items) {
+  window_->SetTouchBar(items);
+}
+
+void Window::RefreshTouchBarItem(const std::string& item_id) {
+  window_->RefreshTouchBarItem(item_id);
+}
+
+void Window::SetEscapeTouchBarItem(const mate::PersistentDictionary& item) {
+  window_->SetEscapeTouchBarItem(item);
+}
+
 int32_t Window::ID() const {
   return weak_map_id();
 }
 
 v8::Local<v8::Value> Window::WebContents(v8::Isolate* isolate) {
-  if (web_contents_.IsEmpty())
+  if (web_contents_.IsEmpty()) {
     return v8::Null(isolate);
-  else
-    return v8::Local<v8::Value>::New(isolate, web_contents_);
+  }
+
+  return v8::Local<v8::Value>::New(isolate, web_contents_);
 }
 
 void Window::RemoveFromParentChildWindows() {
@@ -875,6 +980,8 @@ void Window::BuildPrototype(v8::Isolate* isolate,
 #endif
       .SetMethod("getParentWindow", &Window::GetParentWindow)
       .SetMethod("getChildWindows", &Window::GetChildWindows)
+      .SetMethod("getBrowserView", &Window::GetBrowserView)
+      .SetMethod("setBrowserView", &Window::SetBrowserView)
       .SetMethod("isModal", &Window::IsModal)
       .SetMethod("getNativeWindowHandle", &Window::GetNativeWindowHandle)
       .SetMethod("getBounds", &Window::GetBounds)
@@ -942,6 +1049,9 @@ void Window::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("setAutoHideCursor", &Window::SetAutoHideCursor)
 #endif
       .SetMethod("setVibrancy", &Window::SetVibrancy)
+      .SetMethod("_setTouchBarItems", &Window::SetTouchBar)
+      .SetMethod("_refreshTouchBarItem", &Window::RefreshTouchBarItem)
+      .SetMethod("_setEscapeTouchBarItem", &Window::SetEscapeTouchBarItem)
 #if defined(OS_WIN)
       .SetMethod("hookWindowMessage", &Window::HookWindowMessage)
       .SetMethod("isWindowMessageHooked", &Window::IsWindowMessageHooked)
